@@ -55,11 +55,12 @@ ga_init(const char *user, gid_t base)
 {
 #ifdef WINDOWS
 #pragma warning(push, 3)
-	LPLOCALGROUP_USERS_INFO_0 local_groups_info = NULL, tmp_groups_info;
-	wchar_t *user_utf16 = NULL, *full_name_utf16 = NULL, *udom_utf16 = NULL, *tmp;
+	LPLOCALGROUP_USERS_INFO_0 local_groups_info = NULL, tmp_lpgroups_info;
+	LPGROUP_USERS_INFO_0 groups_info = NULL, tmp_groups_info;
+	wchar_t *user_utf16 = NULL, *full_name_utf16 = NULL, *udom_utf16 = NULL, *dc_name = NULL, *tmp;
 	char *group_utf8 = NULL;
 	DWORD i = 0, j = 0;
-	DWORD entries_read = 0, total_entries = 0, full_name_len = 0, index = 0;
+	DWORD entries_lg_read = 0, total_lg_entries = 0, entries_gg_read = 0, total_gg_entries = 0, full_name_len = 0, index = 0;
 	NET_API_STATUS nStatus;
 	
 	if (ngroups > 0)
@@ -91,8 +92,8 @@ ga_init(const char *user, gid_t base)
 		LG_INCLUDE_INDIRECT,
 		(LPBYTE *)&local_groups_info,
 		MAX_PREFERRED_LENGTH,
-		&entries_read,
-		&total_entries);
+		&entries_lg_read,
+		&total_lg_entries);
 
 	if (NERR_Success != nStatus) {
 		error("NetUserGetLocalGroups() failed with error: %u",
@@ -101,18 +102,67 @@ ga_init(const char *user, gid_t base)
 		goto done;
 	}
 
-	if (entries_read != total_entries) {
+	if (entries_lg_read != total_lg_entries) {
 		error("NetUserGetLocalGroups(): entries_read (%u) is not equal to "
-		    "total_entries (%u) for user %.100s", entries_read, total_entries, user);
+		    "total_entries (%u) for user %.100s", entries_lg_read, total_lg_entries, user);
 		errno = ENOENT;
 		goto done;
 	}
+	
+	if(udom_utf16)
+	{
+		// Get default DC name
+		nStatus = NetGetDCName(NULL, udom_utf16, (LPBYTE *)&dc_name);
+		if (NERR_Success != nStatus) {
+			error("NetGetDCName() failed with error: %u",
+				nStatus);
+			errno = ENOENT;
+			goto done;
+		}
 
-	if ((tmp_groups_info = local_groups_info) != NULL) {
-		groups_byname = xcalloc(entries_read, sizeof(*groups_byname));
-		for (i = 0, j = 0; i < total_entries; i++)
+		nStatus = NetUserGetGroups(dc_name,
+			user_utf16,
+			0,
+			(LPBYTE *)&groups_info,
+			MAX_PREFERRED_LENGTH,
+			&entries_gg_read,
+			&total_gg_entries);
+
+		if (NERR_Success != nStatus) {
+			error("NetUserGetGroups() failed with error: %u",
+				nStatus);
+			errno = ENOENT;
+			goto done;
+		}
+
+		if (entries_gg_read != total_gg_entries) {
+			error("NetUserGetGroups(): entries_read (%u) is not equal to "
+				"total_entries (%u) for user %.100s", entries_gg_read, total_gg_entries, user);
+			errno = ENOENT;
+			goto done;
+		}
+	}
+
+	if ((entries_lg_read + entries_gg_read) > 0) {
+		groups_byname = xcalloc(entries_lg_read + entries_gg_read, sizeof(*groups_byname));
+	}
+
+	if ((tmp_lpgroups_info = local_groups_info) != NULL) {		
+		for (i = 0, j = 0; i < total_lg_entries; i++)
 		{
-			if ((group_utf8 = utf16_to_utf8(tmp_groups_info->lgrui0_name)) == NULL) {
+			if ((group_utf8 = utf16_to_utf8(tmp_lpgroups_info->lgrui0_name)) == NULL) {
+				errno = ENOMEM;
+				goto done;
+			}
+			groups_byname[j++] = group_utf8;
+			tmp_lpgroups_info++;
+		}
+	}
+
+	if ((tmp_groups_info = groups_info) != NULL) {		
+		for (i = 0; i < total_gg_entries; i++)
+		{
+			if ((group_utf8 = utf16_to_utf8(tmp_groups_info->grui0_name)) == NULL) {
 				errno = ENOMEM;
 				goto done;
 			}
@@ -121,14 +171,17 @@ ga_init(const char *user, gid_t base)
 		}
 	}
 
-done:
+done:	
 	if(user_utf16 != NULL)
 		free(user_utf16);
 	if(full_name_utf16 != NULL)
 		free(full_name_utf16);
 	if (local_groups_info != NULL)
 		NetApiBufferFree(local_groups_info);
-
+	if (groups_info != NULL)
+		NetApiBufferFree(groups_info);
+	if(dc_name)
+		NetApiBufferFree(dc_name);
 #pragma warning(pop)
 
 #else /* !WINDOWS */
