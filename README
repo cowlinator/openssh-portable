@@ -27,7 +27,8 @@ The PAM support is now more functional than the popular packages of
 commercial ssh-1.2.x. It checks "account" and "session" modules for
 all logins, not just when using password authentication.
 
-OpenSSH depends on Zlib[3], OpenSSL[4] and optionally PAM[5].
+OpenSSH depends on Zlib[3], OpenSSL[4], and optionally PAM[5] and
+libedit[6]
 
 There is now several mailing lists for openssh/openssh-portable. Please
 refer to https://www.openssh.com/list.html for details on how to join.
@@ -58,4 +59,5 @@ References -
 [5] http://www.openpam.org
     http://www.kernel.org/pub/linux/libs/pam/
     (PAM also is standard on Solaris and HP-UX 11)
-[6] http://man.openbsd.org/style.9
+[6] http://thrysoee.dk/editline/ (portable version)
+[7] http://man.openbsd.org/style.9
