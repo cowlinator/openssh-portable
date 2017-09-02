@@ -4,6 +4,10 @@ port of OpenBSD's excellent OpenSSH[0] to Windows.
 Note that OpenSSH for Windows uses this repo for patch/pull-request 
 management, and PowerShell/Win32-OpenSSH for issue tracking.
 
+See https://github.com/PowerShell/openssh-portable/wiki for more info
+about the 2 repos, as well as links to documentation and 
+installation instructions.
+
 Instructions to report bus for openssh/openssh-portable are here: 
 https://www.openssh.com/report.html
 
